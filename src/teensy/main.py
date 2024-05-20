@@ -47,7 +47,10 @@ dacs = dacs.DACs(CONTROL_RATE, envelope_values, velocity_values)
 
 # MIDI Callbacks
 def note_on(msg):
-    # 
+    """
+    MIDI Note On callback function.
+    Updates velocity and triggers envelope gate.
+    """
     note_index = msg.note - MIDI_LOW_VALUE
     velocity_values[note_index] = msg.velocity
     envelopes.envelopes[note_index].gate(1)
@@ -55,7 +58,11 @@ def note_on(msg):
         print(f'note on {msg}')
         print(f'env vals {envelope_values}')
 
-def note_off(msg): 
+def note_off(msg):
+    """
+    MIDI Note Off callback function.
+    Turns envelope gate off.
+    """
     note_index = msg.note - MIDI_LOW_VALUE
     envelopes.envelopes[note_index].gate(0)
     if DEBUG:
@@ -63,6 +70,9 @@ def note_off(msg):
         print(f'env vals {envelope_values}')
 
 def control_change(msg):
+    """
+    Volume and Envelope settings per note.
+    """
     if msg.channel == OUT_VOL_CHAN and msg.control >= MIDI_LOW_VALUE:
         # Process Dynamic Volume Control
         control_index = msg.control - MIDI_LOW_VALUE
