@@ -18,7 +18,6 @@ from config import *
 import adsr
 import envelopes
 import dacs
-DEBUG = False
 
 if DEBUG:
     print("fluxharmonium")
@@ -30,19 +29,21 @@ midi = adafruit_midi.MIDI(
 
 velocity_values = [0] * NUMBER_OF_NOTES
 envelope_values = [0] * NUMBER_OF_NOTES
+dac_values = [DAC_STARTUP_VALUE] * NUMBER_OF_NOTES
 
 # Prepare all of the Envelopes
-envelopes = envelopes.Envelopes(CONTROL_RATE, envelope_values)
+envelopes = envelopes.Envelopes(CONTROL_RATE_SEC, envelope_values)
 
 for e in range(NUMBER_OF_NOTES):
-    envelopes.add_envelope(adsr.ADSR(1, 0.05, 1, 1, CONTROL_RATE))
+    envelopes.add_envelope(adsr.ADSR(0.5, 0, 1, 0.5, CONTROL_RATE))
 
 if DEBUG:
     print(f'env vals {envelope_values}')
     print(f'vel vals {velocity_values}')
 
 # Prepare the DACs (super rough)
-dacs = dacs.DACs(CONTROL_RATE, envelope_values, velocity_values)
+dacs = dacs.DACs(CONTROL_RATE_SEC, dac_values, envelope_values, velocity_values)
+# dacs = dacs.DACs(0.5, dac_values, envelope_values, velocity_values)
 
 
 # MIDI Callbacks
@@ -51,23 +52,29 @@ def note_on(msg):
     MIDI Note On callback function.
     Updates velocity and triggers envelope gate.
     """
-    note_index = msg.note - MIDI_LOW_VALUE
-    velocity_values[note_index] = msg.velocity
-    envelopes.envelopes[note_index].gate(1)
     if DEBUG:
         print(f'note on {msg}')
+    if msg.note >= MIDI_LOW_VALUE and msg.note <= MIDI_HIGH_VALUE:
+        note_index = msg.note - MIDI_LOW_VALUE
+        velocity_values[note_index] = msg.velocity
+        envelopes.envelopes[note_index].gate(1)
+    if DEBUG:
         print(f'env vals {envelope_values}')
+        # print(f'dac vals {dac_values}')
 
 def note_off(msg):
     """
     MIDI Note Off callback function.
     Turns envelope gate off.
     """
-    note_index = msg.note - MIDI_LOW_VALUE
-    envelopes.envelopes[note_index].gate(0)
     if DEBUG:
         print(f'note off {msg}')
+    if msg.note >= MIDI_LOW_VALUE and msg.note <= MIDI_HIGH_VALUE:
+        note_index = msg.note - MIDI_LOW_VALUE
+        envelopes.envelopes[note_index].gate(0)
+    if DEBUG:
         print(f'env vals {envelope_values}')
+        # print(f'dac vals {dac_values}')
 
 def control_change(msg):
     """
@@ -90,8 +97,8 @@ def control_change(msg):
         envelopes.envelopes[note_index].update_release(msg.value/CTRL_SEC_DIV)
 
 
-cl = control_loop.ControlLoop(CONTROL_RATE)
-mm = midi_monitor.MidiMonitor(0, "ALL", note_on, note_off, control_change, CONTROL_RATE)
+cl = control_loop.ControlLoop(CONTROL_RATE_SEC)
+mm = midi_monitor.MidiMonitor(0, "ALL", note_on, note_off, control_change, CONTROL_RATE_SEC)
 
 cl.add_control(mm.run())
 cl.add_control(envelopes.run())

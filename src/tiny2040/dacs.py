@@ -11,86 +11,48 @@ class DACs():
     Setup a DAC control loop to update and output the dac values by combining
     the envelope and velocity values
     """
-    def __init__(self, frequency, env_vals, vel_vals, debug=False):
+    def __init__(self, frequency: float, dac_vals: list, env_vals: list, vel_vals: list):
         self.frequency = frequency
-        self.debug = debug
         self.env_vals = env_vals
         self.vel_vals = vel_vals
         self.dac_max_value = 255
-        # DAC starting value
-        dsv = self.dac_max_value
-        self.dac_values = [
-            [dsv, dsv, dsv, dsv, dsv, dsv, dsv, dsv],
-            [dsv, dsv, dsv, dsv, dsv, dsv, dsv, dsv],
-            [dsv, dsv, dsv, dsv, dsv, dsv, dsv, dsv],
-            [dsv, dsv, dsv, dsv, dsv, dsv, dsv, dsv],
-            [dsv, dsv, dsv, dsv, dsv, dsv, dsv, dsv],
-            [dsv, dsv, dsv, dsv, dsv, dsv, dsv, dsv],
-            [dsv, dsv, dsv, dsv, dsv, dsv, dsv, dsv],
-            [dsv, dsv, dsv, dsv, dsv, dsv, dsv, dsv],
-            [dsv, dsv, dsv, dsv, dsv, dsv, dsv, dsv],
-            [dsv, dsv, dsv, dsv, dsv, dsv, dsv, dsv],
-            [dsv, dsv, dsv, dsv, dsv, dsv, dsv, dsv],
-            [dsv, dsv, dsv, dsv, dsv, dsv, dsv, dsv],
-        ]
+        # DAC starting value           
+        self.dac_values = dac_vals
 
         self.ltc1665 = creativecontrol_circuitpython_ltc166x.LTC1665(
             csel=board.GP1, sck=board.GP2, mosi=board.GP3, debug=False
         )
+        self.init_all_dacs()
 
-        self.ltc1665.write_chained_dac_values(self.dac_values)
+    def init_all_dacs(self):
+        dac_line = [255]*NUMBER_OF_DACS
+        self.ltc1665.write_chained_dac_value(dac_line, self.ltc1665.DAC_ALL)
 
-    def get_group_index(self, position):
-        """
-        Retrieving the matrix 2D position
-        """
-        output = position
-
-        group = int(((output-1) / 8))
-        index = int(((output-1) % 8))
-
-        if self.debug:
-            print("output: ", output)
-            print("group: ", group)
-            print("index: ", index)
-
-        return {"group": group, "index": index}
-
-    def invert_dac_value(self, value):
-        """
-        Because of the circuit the value of the output range must be inverted.
-        """
-        return self.dac_max_value - value
+    def scale_midi_to_dac(self, x):
+        # Start simple by inverting MIDI range
+        # if you need more use MIDI_DAC_MAP
+        MIDI_MAX = 127
+        return MIDI_MAX - x
+        # return MIDI_DAC_MAP[x]
 
     def calculate_dac_values(self):
         """
-        Calculate all values for all DACs.
-        current envelope value * velocity value * 2
-
-        envelope and velocity values are 0-127 so must be doubled
-        to take advantage of the full DAC range.
+        Read backwards through the array to fill the farthest DAC first
         """
         for dac in range(NUMBER_OF_NOTES):
-            dac_index = self.get_group_index(NOTE_MAP[dac+MIDI_LOW_VALUE]-1)
-            try:
-                self.dac_values[dac_index["group"]][dac_index["index"]] = self.invert_dac_value(
-                    math.floor((self.env_vals[dac] * self.vel_vals[dac] * 2)))
-            except IndexError:
-                print(f'Index Error - dac: {dac}')
-                print(f'note: {NOTE_MAP[dac+MIDI_LOW_VALUE]}')
-                print(f'idx: {dac_index}')
-
-    def freq_to_sec(self, freq):
-        """
-        Returns the space between events in seconds.
-        """
-        return 1000/1000/freq
-
+            # This mapping should move into the final position so that LTC1665 library doesn't have to reorganize
+            dac_map = NOTE_MAP[dac+MIDI_LOW_VALUE]
+            self.dac_values[dac_map['map']-1] = self.scale_midi_to_dac(
+                    (self.env_vals[dac] * self.vel_vals[dac])//1000
+                )
+    
     async def run(self):
         """
         DAC loop
         """
         while True:
             self.calculate_dac_values()
-            self.ltc1665.write_chained_dac_values(self.dac_values)
-            await asyncio.sleep(self.freq_to_sec(self.frequency))
+            if DEBUG:
+                print(f'dac vals {self.dac_values}\n')
+            self.ltc1665.write_listed_dac_values(self.dac_values, NUMBER_OF_DACS)
+            await asyncio.sleep(self.frequency)

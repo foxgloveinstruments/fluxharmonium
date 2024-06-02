@@ -19,9 +19,6 @@ class ControlLoop:
     def freq_to_ms(self, freq):
         return 1000/freq
 
-    def freq_to_sec(self, freq):
-        return 1000/1000/freq
-
     def add_control(self, control):
         self.controls.append(asyncio.create_task(control))
 
@@ -33,4 +30,4 @@ class ControlLoop:
             control_value = next(control)
             self.output_control(control_value)
         # Is this the most accurate timing for coroutines ?
-        await asyncio.sleep(self.freq_to_sec(self.frequency))
+        await asyncio.sleep(self.frequency)

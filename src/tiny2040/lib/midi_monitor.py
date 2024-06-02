@@ -17,9 +17,6 @@ class MidiMonitor():
         self.control_change_function = _control_change_function
         self.frequency = frequency
         self.debug = debug
-    
-    def freq_to_sec(self, freq):
-        return 1000/1000/freq
 
     async def run(self):
         while True:
@@ -41,4 +38,4 @@ class MidiMonitor():
                     self.control_change_function(msg)
                     if self.debug:
                         print(f'received Control Change {msg}')
-            await asyncio.sleep(self.freq_to_sec(self.frequency))
+            await asyncio.sleep(self.frequency)

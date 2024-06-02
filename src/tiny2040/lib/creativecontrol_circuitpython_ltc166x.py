@@ -111,6 +111,12 @@ class LTC166X:
         Return device range based on device used.
         """
         return self._range
+    
+    def get_num_channels(self):
+        """
+        Return number of device dac channels.
+        """
+        return self._num_channels
 
     def sleep(self, dac):
         """
@@ -121,6 +127,60 @@ class LTC166X:
         """
         Wake DAC with no value updates.
         """
+    def rearrange_values(self, values, step_size=8, num_groups=8):
+        """
+        Rearranges a list of values into a specified number of groups with a 
+        defined group size, following a specific iteration pattern.
+
+        Args:
+            values: A list of values to be rearranged.
+            group_size: The number of values in each group (default 8).
+            num_groups: The total number of groups to create (default 12).
+
+        Returns:
+            A list of lists, where each sublist represents a group.
+        """
+
+        # Define a step value that increases by group_size for each group
+        step_start = 0
+
+        groups = []
+        for _ in range(num_groups):
+            # Create a group by selecting values based on the step value
+            group = values[step_start::step_size]
+
+            # Update the step value to start from the next element after the previous group
+            step_start += 1
+
+            # Add the group to the list of groups
+            groups.extend(group)
+
+        return reversed(groups)
+
+    def write_listed_dac_values(self, dac_values: list, chain_length: int):
+        """
+        Write list of values to a chain of DACs. Expects a 1D list of dac values
+        whose length is a multiple of _chain_length i.e. [1a,2a,3a,1b,2b,3b,1c,2c,3c]
+        Do not update if value is < 0. This allows for comparison of
+        update frames and only updating if value has changed.
+
+        :param list dac_values: list of values from 0 to device range.
+
+        """
+        # It might be possible to supply this as a pre arranged list
+        dac_chain_list = list(self.rearrange_values(dac_values))
+
+        if dac_chain_list:
+            data_length = len(dac_values)
+            chain_index = self._num_channels
+            for chain in range(0, data_length, chain_length):
+                with self._device as spi:
+                    for dac in dac_chain_list[chain:chain+chain_length]:
+                        if dac >= 0:
+                            self.write_value_to_spi(spi, int(dac), chain_index)
+                        else:
+                            self.write_value_to_spi(spi, 0, 0)
+                    chain_index = chain_index - 1 # Decrement counter
 
     def write_chained_dac_values(self, dac_values: list):
         """
@@ -144,7 +204,8 @@ class LTC166X:
                     else:
                         self.write_value_to_spi(spi, 0, 0)
 
-    def write_chained_dac_value(self, value: list, address: int, chain_length: int):
+
+    def write_chained_dac_value(self, dac_values: list, address: int):
         """
         Write a single DAC value to a chain.
 
@@ -153,8 +214,8 @@ class LTC166X:
         :param int chain_length: Number of DACs in the chain.
         """
         with self._device as spi:
-            for _ in enumerate(chain_length):
-                self.write_value_to_spi(spi, value, address)
+            for dac in dac_values:
+                self.write_value_to_spi(spi, dac, address)
 
     def write_dac_value(self, value: int, address: int):
         """
@@ -195,7 +256,7 @@ class LTC166X:
         out |= value << (self._data_bits - self._bit_depth)
         out_bytes = out.to_bytes(2, "big")
         if self._debug:
-            print(f"{address} {hex(out)} {out_bytes} {len(out_bytes)}")
+            print(f"Address: {address} value: {value} hex: {hex(out)} bytes:{out_bytes}")
         spi.write(out_bytes)
 
 
